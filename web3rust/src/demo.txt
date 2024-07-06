@@ -1,0 +1,81 @@
+use actix_web::{web, App, HttpServer, HttpResponse, Responder};
+use std::str::FromStr;
+use web3::contract::{Contract, Options};
+use web3::types::{BlockId, BlockNumber};
+use web3::{transports::Http, Web3};
+
+async fn index() -> impl Responder {
+    // Replace with your Ethereum node URL
+    let http = Http::new("http://localhost:8545").expect("Failed to create HTTP transport");
+
+    let web3 = Web3::new(http);
+
+    // Replace with your contract address and ABI
+    let contract_address = "YOUR_CONTRACT_ADDRESS";
+    let contract_abi = include_bytes!("path_to_your_contract_abi.json");
+
+    let contract = Contract::from_json(
+        web3.eth(),
+        web3::types::Address::from_str(contract_address).unwrap(),
+        contract_abi,
+    )
+    .expect("Failed to create contract");
+
+    // Example: Call the `get` function on the contract
+    let result = contract
+        .query::<_, u32>("get", (), None, BlockId::Number(BlockNumber::Latest))
+        .await;
+
+    match result {
+        Ok(value) => HttpResponse::Ok().body(format!("Stored value in contract: {}", value)),
+        Err(err) => HttpResponse::InternalServerError().body(format!("Error calling contract function: {}", err)),
+    }
+}
+
+async fn set_value() -> impl Responder {
+    // Replace with your Ethereum node URL
+    let http = Http::new("http://localhost:8545").expect("Failed to create HTTP transport");
+
+    let web3 = Web3::new(http);
+
+    // Replace with your contract address and ABI
+    let contract_address = "YOUR_CONTRACT_ADDRESS";
+    let contract_abi = include_bytes!("path_to_your_contract_abi.json");
+
+    let contract = Contract::from_json(
+        web3.eth(),
+        web3::types::Address::from_str(contract_address).unwrap(),
+        contract_abi,
+    )
+    .expect("Failed to create contract");
+
+    // Example: Send a transaction to call the `set` function on the contract
+    let accounts = web3.eth().accounts().await.unwrap();
+    let account = accounts[0]; // Use the first account for simplicity
+
+    let tx = contract
+        .call(
+            "set",
+            (42,), // Pass the argument to the `set` function
+            Options::default().gas(web3::types::U256::from(100000)),
+            Some(account),
+        )
+        .await;
+
+    match tx {
+        Ok(tx) => HttpResponse::Ok().body(format!("Transaction sent: {:?}", tx)),
+        Err(err) => HttpResponse::InternalServerError().body(format!("Failed to send transaction: {}", err)),
+    }
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| {
+        App::new()
+            .route("/", web::get().to(index))
+            .route("/set", web::get().to(set_value))
+    })
+    .bind("127.0.0.1:8080")?
+    .run()
+    .await
+}
